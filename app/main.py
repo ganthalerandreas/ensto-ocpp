@@ -1,27 +1,28 @@
-from fastapi import FastAPI, WebSocket, Request
+import os
+from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
 from app.ocpp_handler import ChargePointHandler
-from app.init_db import init_db
 
 app = FastAPI()
 
-templates = Jinja2Templates(directory="templates")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(
+    directory=os.path.join(BASE_DIR, "../templates")
+)
 
-init_db()
+app.mount(
+    "/static",
+    StaticFiles(directory=os.path.join(BASE_DIR, "../static")),
+    name="static"
+)
 
 
 @app.get("/")
 def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
-
-
-@app.websocket("/ocpp/{cp_id}")
-async def ocpp(ws: WebSocket, cp_id: str):
-    await ws.accept()
-
-    cp = ChargePointHandler(cp_id, ws)
-    await cp.run()
+    return templates.TemplateResponse(
+        "index.html",
+        {"request": request}
+    )
