@@ -1,2 +1,5 @@
 fastapi
 uvicorn
+ocpp
+jinja2
+websockets
