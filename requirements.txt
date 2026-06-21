@@ -3,3 +3,5 @@ uvicorn
 ocpp
 jinja2
 websockets
+sqlalchemy
+psycopg2-binary
