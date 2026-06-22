@@ -1,24 +1,84 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-import os
-
-from app.ocpp_server import start_ocpp_server
+from ocpp.v16 import ChargePoint as CP
+from ocpp.v16 import call_result
+from ocpp.routing import on
+import datetime
 
 app = FastAPI()
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "../templates")), name="static")
+current_status = "In attesa connessione"
 
 
-@app.on_event("startup")
-async def startup():
-    import asyncio
-    asyncio.create_task(start_ocpp_server())
+class ChargePointHandler(CP):
+
+    @on("BootNotification")
+    async def on_boot(self, **kwargs):
+
+        global current_status
+        current_status = "Connessa"
+
+        print("BootNotification ricevuto")
+
+        return call_result.BootNotification(
+            current_time=datetime.datetime.utcnow().isoformat(),
+            interval=30,
+            status="Accepted"
+        )
+
+    @on("StatusNotification")
+    async def on_status(self, status, **kwargs):
+
+        global current_status
+        current_status = status
+
+        print("STATUS:", status)
+
+        return call_result.StatusNotification()
 
 
 @app.get("/")
 def home():
-    html = open(os.path.join(BASE_DIR, "../templates/index.html")).read()
-    return HTMLResponse(html)
+
+    return HTMLResponse(f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    </head>
+    <body>
+    <h1>Wallbox Status</h1>
+    <h2>{current_status}</h2>
+    </body>
+    </html>
+    """)
+
+
+@app.websocket("/ENSTO001")
+async def websocket_endpoint(websocket: WebSocket):
+
+    protocols = websocket.headers.get(
+        "sec-websocket-protocol"
+    )
+
+    if protocols != "ocpp1.6":
+        print("Subprotocol errato:", protocols)
+        await websocket.close()
+        return
+
+    await websocket.accept(
+        subprotocol="ocpp1.6"
+    )
+
+    print("Wallbox collegata")
+
+    cp = ChargePointHandler(
+        "ENSTO001",
+        websocket
+    )
+
+    try:
+        await cp.start()
+
+    except WebSocketDisconnect:
+        print("Wallbox disconnessa")
