@@ -2,6 +2,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from ocpp.v16 import ChargePoint
 from ocpp.v16 import call_result
+from ocpp.v16.call_result import BootNotification
 from ocpp.routing import on
 import datetime
 
@@ -35,7 +36,7 @@ class CP(ChargePoint):
 
         print("BootNotification ricevuto")
 
-        return call_result.BootNotification(
+        return BootNotification(
             current_time=datetime.datetime.utcnow().isoformat(),
             interval=30,
             status="Accepted"
