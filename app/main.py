@@ -1,24 +1,24 @@
-from fastapi import FastAPI, Request
-from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-
 import os
+
+from app.ocpp_server import start_ocpp_server
 
 app = FastAPI()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "../templates"))
+app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "../templates")), name="static")
 
-app.mount(
-    "/static",
-    StaticFiles(directory=os.path.join(BASE_DIR, "../static")),
-    name="static"
-)
+
+@app.on_event("startup")
+async def startup():
+    import asyncio
+    asyncio.create_task(start_ocpp_server())
+
 
 @app.get("/")
-def home(request: Request):
-    return templates.TemplateResponse(
-        "index.html",
-        {"request": request}
-    )
+def home():
+    html = open(os.path.join(BASE_DIR, "../templates/index.html")).read()
+    return HTMLResponse(html)
