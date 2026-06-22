@@ -30,7 +30,6 @@ class ChargePointHandler(CP):
             status="Accepted"
         )
 
-
     @on("StatusNotification")
     async def on_status(self, status, **kwargs):
 
@@ -43,19 +42,19 @@ class ChargePointHandler(CP):
 
 async def on_connect(websocket):
 
-    global current_status
-
     if websocket.subprotocol != "ocpp1.6":
-        print("Protocollo errato:", websocket.subprotocol)
+
+        print(
+            "Subprotocol errato:",
+            websocket.subprotocol
+        )
 
         await websocket.close()
 
         return
 
-    cp_id="ENSTO001"
-
-    cp=ChargePointHandler(
-        cp_id,
+    cp = ChargePointHandler(
+        "ENSTO001",
         websocket
     )
 
@@ -64,16 +63,25 @@ async def on_connect(websocket):
     await cp.start()
 
 
+async def run_ocpp_server():
+
+    server = await websockets.serve(
+        on_connect,
+        "0.0.0.0",
+        9000,
+        subprotocols=["ocpp1.6"]
+    )
+
+    print("OCPP server avviato")
+
+    await server.wait_closed()
+
+
 @app.on_event("startup")
 async def startup():
 
     asyncio.create_task(
-        websockets.serve(
-            on_connect,
-            "0.0.0.0",
-            9000,
-            subprotocols=["ocpp1.6"]
-        )
+        run_ocpp_server()
     )
 
 
@@ -83,8 +91,11 @@ def home():
     return HTMLResponse(f"""
     <html>
     <body>
+
     <h1>Wallbox Status</h1>
+
     <h2>{current_status}</h2>
+
     </body>
     </html>
     """)
