@@ -1,19 +1,30 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
-import asyncio
-import datetime
-import websockets
-
-from ocpp.v16 import ChargePoint as CP
+from ocpp.v16 import ChargePoint
 from ocpp.v16 import call_result
 from ocpp.routing import on
+import datetime
 
 app = FastAPI()
 
-current_status = "In attesa connessione"
+current_status = "In attesa connessione..."
 
 
-class ChargePointHandler(CP):
+# Adattatore: trasforma WebSocket FastAPI
+# nel formato richiesto dalla libreria OCPP
+class WebSocketAdapter:
+
+    def __init__(self, websocket):
+        self.websocket = websocket
+
+    async def recv(self):
+        return await self.websocket.receive_text()
+
+    async def send(self, message):
+        await self.websocket.send_text(message)
+
+
+class CP(ChargePoint):
 
     @on("BootNotification")
     async def on_boot(self, **kwargs):
@@ -40,55 +51,11 @@ class ChargePointHandler(CP):
         print("STATUS:", status)
 
 
-async def on_connect(websocket):
-
-    if websocket.subprotocol != "ocpp1.6":
-
-        print(
-            "Subprotocol errato:",
-            websocket.subprotocol
-        )
-
-        await websocket.close()
-
-        return
-
-    cp = ChargePointHandler(
-        "ENSTO001",
-        websocket
-    )
-
-    print("Wallbox collegata")
-
-    await cp.start()
-
-
-async def run_ocpp_server():
-
-    server = await websockets.serve(
-        on_connect,
-        "0.0.0.0",
-        9000,
-        subprotocols=["ocpp1.6"]
-    )
-
-    print("OCPP server avviato")
-
-    await server.wait_closed()
-
-
-@app.on_event("startup")
-async def startup():
-
-    asyncio.create_task(
-        run_ocpp_server()
-    )
-
-
 @app.get("/")
 def home():
 
     return HTMLResponse(f"""
+    <!DOCTYPE html>
     <html>
     <body>
 
@@ -99,3 +66,47 @@ def home():
     </body>
     </html>
     """)
+
+
+@app.websocket("/ENSTO001")
+async def websocket_endpoint(websocket: WebSocket):
+
+    protocols = websocket.headers.get(
+        "sec-websocket-protocol",
+        ""
+    )
+
+    print("Protocol:", protocols)
+
+    if "ocpp1.6" not in protocols:
+
+        print("Protocollo OCPP mancante")
+
+        await websocket.close()
+
+        return
+
+    await websocket.accept(
+        subprotocol="ocpp1.6"
+    )
+
+    print("Wallbox collegata")
+
+    connection = WebSocketAdapter(
+        websocket
+    )
+
+    cp = CP(
+        "ENSTO001",
+        connection
+    )
+
+    try:
+
+        await cp.start()
+
+    except WebSocketDisconnect:
+
+        print(
+            "Wallbox disconnessa"
+        )
